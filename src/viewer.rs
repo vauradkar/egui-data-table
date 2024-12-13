@@ -222,6 +222,12 @@ pub trait RowViewer<R>: 'static {
         let (_, _) = (highlighted, unhighlighted);
     }
 
+    /// Return id to be displayed on the first column
+    fn get_row_id(&self, row: &R) -> Option<(String, usize)> {
+        let _ = row;
+        None
+    }
+
     /// Return hotkeys for the current context.
     fn hotkeys(&mut self, context: &UiActionContext) -> Vec<(egui::KeyboardShortcut, UiAction)> {
         self::default_hotkeys(context)

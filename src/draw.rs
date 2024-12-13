@@ -53,6 +53,9 @@ pub struct Renderer<'a, R, V: RowViewer<R>> {
     viewer: &'a mut V,
     state: Option<Box<UiState<R>>>,
     style: Style,
+    /// Column header for row id.
+    /// Defaults to "POS / ID"
+    pub id_header: String,
 }
 
 impl<R, V: RowViewer<R>> egui::Widget for Renderer<'_, R, V> {
@@ -74,11 +77,17 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
             table,
             viewer,
             style: Default::default(),
+            id_header: "POS / ID".into(),
         }
     }
 
     pub fn with_style(mut self, style: Style) -> Self {
         self.style = style;
+        self
+    }
+
+    pub fn with_id_header(mut self, id_header: impl ToString) -> Self {
+        self.id_header = id_header.to_string();
         self
     }
 
@@ -149,9 +158,13 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
             .max_scroll_height(f32::MAX)
             .sense(Sense::click_and_drag().tap_mut(|s| s.focusable = true))
             .header(20., |mut h| {
-                h.col(|_ui| {
-                    // TODO: Add `Configure Sorting` button
+                h.set_selected(s.cci_has_focus);
+                h.col(|ui| {
+                    ui.centered_and_justified(|ui| {
+                        ui.monospace(&self.id_header);
+                    });
                 });
+                h.set_selected(false);
 
                 let has_any_hidden_col = s.vis_cols().len() != s.num_columns();
 
@@ -427,30 +440,38 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.separator();
 
-                    if has_any_sort {
+                    if let Some((entry, width)) = viewer.get_row_id(&table.rows[row_id.0]) {
+                        ui.monospace(RichText::from(f!("{: >width$}", entry)).strong());
+                    } else {
+                        if has_any_sort {
+                            ui.monospace(
+                                RichText::from(f!(
+                                    "{:·>width$}",
+                                    row_id.0,
+                                    width = row_id_digits as usize
+                                ))
+                                .strong(),
+                            );
+                        } else {
+                            ui.monospace(
+                                RichText::from(f!(
+                                    "{:>width$}",
+                                    "",
+                                    width = row_id_digits as usize
+                                ))
+                                .strong(),
+                            );
+                        }
+
                         ui.monospace(
                             RichText::from(f!(
                                 "{:·>width$}",
-                                row_id.0,
-                                width = row_id_digits as usize
+                                vis_row.0 + 1,
+                                width = vis_row_digits as usize
                             ))
-                            .strong(),
-                        );
-                    } else {
-                        ui.monospace(
-                            RichText::from(f!("{:>width$}", "", width = row_id_digits as usize))
-                                .strong(),
+                            .weak(),
                         );
                     }
-
-                    ui.monospace(
-                        RichText::from(f!(
-                            "{:·>width$}",
-                            vis_row.0 + 1,
-                            width = vis_row_digits as usize
-                        ))
-                        .weak(),
-                    );
                 });
             });
 

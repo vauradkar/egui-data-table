@@ -231,6 +231,10 @@ impl RowViewer<Row> for Viewer {
         info!("highlight {:?}", highlighted);
         info!("unhighlight {:?}", unhighlighted);
     }
+
+    fn get_row_id(&self, row: &Row) -> Option<(String, usize)> {
+        Some((format!("/tmp/{}", row.0), 30))
+    }
 }
 
 /* ------------------------------------------ View Loop ----------------------------------------- */
@@ -351,6 +355,7 @@ impl eframe::App for DemoApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add(
                 egui_data_table::Renderer::new(&mut self.table, &mut self.viewer)
+                    .with_id_header("path")
                     .with_style(self.style_override),
             )
         });
