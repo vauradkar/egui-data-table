@@ -106,7 +106,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                 h.set_selected(s.cci_has_focus);
                 h.col(|ui| {
                     ui.centered_and_justified(|ui| {
-                        ui.monospace("POS / ID");
+                        ui.monospace(&self.config.id_header);
                     });
                 });
                 h.set_selected(false);
@@ -382,19 +382,27 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.separator();
 
-                    ui.monospace(
-                        RichText::from(f!("{:·>width$}", row_id.0, width = row_id_digits as usize))
+                    if let Some((entry, width)) = viewer.get_row_id(&table.rows[row_id.0]) {
+                        ui.monospace(RichText::from(f!("{: >width$}", entry)).strong());
+                    } else {
+                        ui.monospace(
+                            RichText::from(f!(
+                                "{:·>width$}",
+                                row_id.0,
+                                width = row_id_digits as usize
+                            ))
                             .strong(),
-                    );
+                        );
 
-                    ui.monospace(
-                        RichText::from(f!(
-                            "{:·>width$}",
-                            vis_row.0 + 1,
-                            width = vis_row_digits as usize
-                        ))
-                        .weak(),
-                    );
+                        ui.monospace(
+                            RichText::from(f!(
+                                "{:·>width$}",
+                                vis_row.0 + 1,
+                                width = vis_row_digits as usize
+                            ))
+                            .weak(),
+                        );
+                    }
                 });
             });
 

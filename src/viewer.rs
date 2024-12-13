@@ -215,6 +215,12 @@ pub trait RowViewer<R>: 'static {
         let (_, _) = (highlighted, unhighlighted);
     }
 
+    /// Return id to be displayed on the first column
+    fn get_row_id(&self, row: &R) -> Option<(String, usize)> {
+        let _ = row;
+        None
+    }
+
     /// Return hotkeys for the current context.
     fn hotkeys(&mut self, context: &UiActionContext) -> Vec<(egui::KeyboardShortcut, UiAction)> {
         self::default_hotkeys(context)
@@ -398,6 +404,10 @@ pub struct TrivialConfig {
 
     /// Maximum number of undo history. This is applied when actual action is performed.
     pub max_undo_history: usize,
+
+    /// Column header for row id.
+    /// Defaults to "POS / ID"
+    pub id_header: String,
 }
 
 impl Default for TrivialConfig {
@@ -405,6 +415,7 @@ impl Default for TrivialConfig {
         Self {
             table_row_height: None,
             max_undo_history: 100,
+            id_header: "POS / ID".into(),
         }
     }
 }

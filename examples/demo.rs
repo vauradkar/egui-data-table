@@ -2,7 +2,10 @@ use std::{borrow::Cow, iter::repeat_with};
 
 use egui::{Response, Sense, Widget};
 use egui_data_table::{
-    viewer::{default_hotkeys, CellWriteContext, DecodeErrorBehavior, RowCodec, UiActionContext},
+    viewer::{
+        default_hotkeys, CellWriteContext, DecodeErrorBehavior, RowCodec, TrivialConfig,
+        UiActionContext,
+    },
     RowViewer,
 };
 use log::info;
@@ -230,6 +233,17 @@ impl RowViewer<Row> for Viewer {
     fn on_highlight_change(&mut self, highlighted: &[&Row], unhighlighted: &[&Row]) {
         info!("highlight {:?}", highlighted);
         info!("unhighlight {:?}", unhighlighted);
+    }
+
+    fn trivial_config(&mut self) -> egui_data_table::viewer::TrivialConfig {
+        TrivialConfig {
+            id_header: "path".into(),
+            ..Default::default()
+        }
+    }
+
+    fn get_row_id(&self, row: &Row) -> Option<(String, usize)> {
+        Some((format!("/tmp/{}", row.0), 30))
     }
 }
 
