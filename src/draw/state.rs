@@ -881,6 +881,8 @@ impl<R> UiState<R> {
                 };
 
                 if matches!(cmd, Command::CcCancelEdit) {
+                    self.cc_cursor = CursorState::Select(default());
+                    std::mem::swap(&mut self.cc_cursor, &mut self.prev_cc_cursor);
                     // Cancellation does not affect to any state.
                     return;
                 }
