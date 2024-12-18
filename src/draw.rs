@@ -28,7 +28,7 @@ pub struct Renderer<'a, R, V: RowViewer<R>> {
     config: TrivialConfig,
 }
 
-impl<'a, R, V: RowViewer<R>> egui::Widget for Renderer<'a, R, V> {
+impl<R, V: RowViewer<R>> egui::Widget for Renderer<'_, R, V> {
     fn ui(self, ui: &mut egui::Ui) -> Response {
         self.show(ui)
     }
@@ -737,7 +737,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
     }
 }
 
-impl<'a, R, V: RowViewer<R>> Drop for Renderer<'a, R, V> {
+impl<R, V: RowViewer<R>> Drop for Renderer<'_, R, V> {
     fn drop(&mut self) {
         self.table.ui = self.state.take();
     }

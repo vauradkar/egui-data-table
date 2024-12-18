@@ -23,7 +23,7 @@ serde = { version = "1", optional = true, features = ["derive"] }
 thiserror = "2"
 
 [dev-dependencies]
-eframe = { version = "0.29", features = ["serde", "persistence"] }
+eframe = { version = "0.30", features = ["serde", "persistence"] }
 fastrand = "2"
 names = { version = "0.14", default-features = false }
 log = "0.4"

@@ -187,6 +187,9 @@ pub(crate) struct UiState<R> {
     /// editing row isn't present.
     cc_cursor: CursorState<R>,
 
+    /// Previous state of cursor that is used to restore after editing is done
+    prev_cc_cursor: CursorState<R>,
+
     /// Number of frames from the last edit. Used to validate sorting.
     cc_num_frame_from_last_edit: usize,
 
@@ -259,6 +262,7 @@ impl<R> Default for UiState<R> {
             clipboard: None,
             viewer_type: std::any::TypeId::of::<()>(),
             cc_cursor: CursorState::Select(default()),
+            prev_cc_cursor: CursorState::Select(default()),
             undo_queue: VecDeque::new(),
             cc_rows: Vec::new(),
             cc_row_heights: Vec::new(),
@@ -765,8 +769,7 @@ impl<R> UiState<R> {
     fn vis_sel_to_row<'a>(&'a self, table: &'a DataTable<R>, sel: &VisSelection) -> &'a R {
         let (ic_r, _ic_c) = sel.1.row_col(self.p.vis_cols.len());
         let row_id = self.cc_rows[ic_r.0];
-        let row = &table.rows[row_id.0];
-        row
+        &table.rows[row_id.0]
     }
 
     fn get_highlight_changes<'a>(
@@ -856,12 +859,13 @@ impl<R> UiState<R> {
             }
             Command::CcEditStart(row_id, column_pos, current) => {
                 // EditStart command is directly applied.
-                self.cc_cursor = CursorState::Edit {
+                self.prev_cc_cursor = CursorState::Edit {
                     edition: *current,
                     next_focus: true,
                     last_focus: column_pos,
                     row: row_id,
                 };
+                std::mem::swap(&mut self.cc_cursor, &mut self.prev_cc_cursor);
 
                 // Update interactive cell.
                 self.cc_interactive_cell =
@@ -888,6 +892,8 @@ impl<R> UiState<R> {
                     Command::SetRowValue(row_id, edition.into()),
                     capacity,
                 );
+                self.cc_cursor = CursorState::Select(default());
+                std::mem::swap(&mut self.cc_cursor, &mut self.prev_cc_cursor);
 
                 return;
             }
@@ -1217,6 +1223,8 @@ impl<R> UiState<R> {
 
                 vec![
                     Command::CcCommitEdit,
+                    // restore cursor state
+                    Command::CcSetSelection(vec![VisSelection(pos, pos)]),
                     Command::CcEditStart(row_id, c, row_value.into()),
                 ]
             }
