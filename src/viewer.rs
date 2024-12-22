@@ -408,6 +408,9 @@ pub struct TrivialConfig {
     /// Column header for row id.
     /// Defaults to "POS / ID"
     pub id_header: String,
+
+    /// when set to false, no context menu is shows. Defauls to true
+    pub show_context_menu: bool,
 }
 
 impl Default for TrivialConfig {
@@ -416,6 +419,7 @@ impl Default for TrivialConfig {
             table_row_height: None,
             max_undo_history: 100,
             id_header: "POS / ID".into(),
+            show_context_menu: true,
         }
     }
 }

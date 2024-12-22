@@ -557,97 +557,23 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                     edit_started = true;
                 }
 
-                /* --------------------------- Context Menu Rendering --------------------------- */
-
-                (resp.clone() | head_resp.clone()).context_menu(|ui| {
-                    response_consumed = true;
-                    ui.set_min_size(egui::vec2(250., 10.));
-
-                    if !selected {
-                        commands.push(Command::CcSetSelection(vec![VisSelection(
-                            linear_index,
-                            linear_index,
-                        )]));
-                    } else if !is_interactive_cell {
-                        s.set_interactive_cell(vis_row, vis_col);
-                    }
-
-                    let sel_multi_row = s.cursor_as_selection().is_some_and(|sel| {
-                        let mut min = usize::MAX;
-                        let mut max = usize::MIN;
-
-                        for sel in sel {
-                            min = min.min(sel.0 .0);
-                            max = max.max(sel.1 .0);
-                        }
-
-                        let (r_min, _) = VisLinearIdx(min).row_col(s.vis_cols().len());
-                        let (r_max, _) = VisLinearIdx(max).row_col(s.vis_cols().len());
-
-                        r_min != r_max
-                    });
-
-                    let cursor_x = ui.cursor().min.x;
-                    let clip = s.has_clipboard_contents();
-                    let b_undo = s.has_undo();
-                    let b_redo = s.has_redo();
-                    let mut n_sep_menu = 0;
-                    let mut draw_sep = false;
-
-                    [
-                        Some((selected, "🖻", "Selection: Copy", UiAction::CopySelection)),
-                        Some((selected, "🖻", "Selection: Cut", UiAction::CutSelection)),
-                        Some((selected, "🗙", "Selection: Clear", UiAction::DeleteSelection)),
-                        Some((
-                            sel_multi_row,
-                            "🗐",
-                            "Selection: Fill",
-                            UiAction::SelectionDuplicateValues,
-                        )),
-                        None,
-                        Some((clip, "➿", "Clipboard: Paste", UiAction::PasteInPlace)),
-                        Some((clip, "🛠", "Clipboard: Insert", UiAction::PasteInsert)),
-                        None,
-                        Some((true, "🗐", "Row: Duplicate", UiAction::DuplicateRow)),
-                        Some((true, "🗙", "Row: Delete", UiAction::DeleteRow)),
-                        None,
-                        Some((b_undo, "⎗", "Undo", UiAction::Undo)),
-                        Some((b_redo, "⎘", "Redo", UiAction::Redo)),
-                    ]
-                    .map(|opt| {
-                        if let Some((icon, label, action)) =
-                            opt.filter(|x| x.0).map(|x| (x.1, x.2, x.3))
-                        {
-                            if draw_sep {
-                                draw_sep = false;
-                                ui.separator();
-                            }
-
-                            let hotkey = hotkeys
-                                .iter()
-                                .find_map(|(k, a)| (a == &action).then(|| ctx.format_shortcut(k)));
-
-                            ui.horizontal(|ui| {
-                                ui.monospace(icon);
-                                ui.add_space(cursor_x + 20. - ui.cursor().min.x);
-
-                                let btn = egui::Button::new(label)
-                                    .shortcut_text(hotkey.unwrap_or_else(|| "🗙".into()));
-                                let r = ui.centered_and_justified(|ui| ui.add(btn)).inner;
-
-                                if r.clicked() {
-                                    actions.push(action);
-                                    ui.close_menu();
-                                }
-                            });
-
-                            n_sep_menu += 1;
-                        } else if n_sep_menu > 0 {
-                            n_sep_menu = 0;
-                            draw_sep = true;
-                        }
-                    });
-                });
+                if self.config.show_context_menu {
+                    render_context_menu(
+                        &mut commands,
+                        ctx,
+                        s,
+                        &mut actions,
+                        &hotkeys,
+                        vis_row,
+                        &head_resp,
+                        vis_col,
+                        selected,
+                        is_interactive_cell,
+                        &mut response_consumed,
+                        &resp,
+                        linear_index,
+                    );
+                }
 
                 // Forward DnD event if not any event was consumed by the response.
 
@@ -785,6 +711,111 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
         // Total response
         resp_total.unwrap()
     }
+}
+
+// Context Menu Rendering
+fn render_context_menu<R>(
+    commands: &mut Vec<Command<R>>,
+    ctx: &egui::Context,
+    s: &mut Box<UiState<R>>,
+    actions: &mut Vec<UiAction>,
+    hotkeys: &Vec<(egui::KeyboardShortcut, UiAction)>,
+    vis_row: VisRowPos,
+    head_resp: &Response,
+    vis_col: VisColumnPos,
+    selected: bool,
+    is_interactive_cell: bool,
+    response_consumed: &mut bool,
+    resp: &Response,
+    linear_index: VisLinearIdx,
+) {
+    (resp.clone() | head_resp.clone()).context_menu(|ui| {
+        *response_consumed = true;
+        ui.set_min_size(egui::vec2(250., 10.));
+
+        if !selected {
+            commands.push(Command::CcSetSelection(vec![VisSelection(
+                linear_index,
+                linear_index,
+            )]));
+        } else if !is_interactive_cell {
+            s.set_interactive_cell(vis_row, vis_col);
+        }
+
+        let sel_multi_row = s.cursor_as_selection().is_some_and(|sel| {
+            let mut min = usize::MAX;
+            let mut max = usize::MIN;
+
+            for sel in sel {
+                min = min.min(sel.0 .0);
+                max = max.max(sel.1 .0);
+            }
+
+            let (r_min, _) = VisLinearIdx(min).row_col(s.vis_cols().len());
+            let (r_max, _) = VisLinearIdx(max).row_col(s.vis_cols().len());
+
+            r_min != r_max
+        });
+
+        let cursor_x = ui.cursor().min.x;
+        let clip = s.has_clipboard_contents();
+        let b_undo = s.has_undo();
+        let b_redo = s.has_redo();
+        let mut n_sep_menu = 0;
+        let mut draw_sep = false;
+
+        [
+            Some((selected, "🖻", "Selection: Copy", UiAction::CopySelection)),
+            Some((selected, "🖻", "Selection: Cut", UiAction::CutSelection)),
+            Some((selected, "🗙", "Selection: Clear", UiAction::DeleteSelection)),
+            Some((
+                sel_multi_row,
+                "🗐",
+                "Selection: Fill",
+                UiAction::SelectionDuplicateValues,
+            )),
+            None,
+            Some((clip, "➿", "Clipboard: Paste", UiAction::PasteInPlace)),
+            Some((clip, "🛠", "Clipboard: Insert", UiAction::PasteInsert)),
+            None,
+            Some((true, "🗐", "Row: Duplicate", UiAction::DuplicateRow)),
+            Some((true, "🗙", "Row: Delete", UiAction::DeleteRow)),
+            None,
+            Some((b_undo, "⎗", "Undo", UiAction::Undo)),
+            Some((b_redo, "⎘", "Redo", UiAction::Redo)),
+        ]
+        .map(|opt| {
+            if let Some((icon, label, action)) = opt.filter(|x| x.0).map(|x| (x.1, x.2, x.3)) {
+                if draw_sep {
+                    draw_sep = false;
+                    ui.separator();
+                }
+
+                let hotkey = hotkeys
+                    .iter()
+                    .find_map(|(k, a)| (a == &action).then(|| ctx.format_shortcut(k)));
+
+                ui.horizontal(|ui| {
+                    ui.monospace(icon);
+                    ui.add_space(cursor_x + 20. - ui.cursor().min.x);
+
+                    let btn = egui::Button::new(label)
+                        .shortcut_text(hotkey.unwrap_or_else(|| "🗙".into()));
+                    let r = ui.centered_and_justified(|ui| ui.add(btn)).inner;
+
+                    if r.clicked() {
+                        actions.push(action);
+                        ui.close_menu();
+                    }
+                });
+
+                n_sep_menu += 1;
+            } else if n_sep_menu > 0 {
+                n_sep_menu = 0;
+                draw_sep = true;
+            }
+        });
+    });
 }
 
 impl<R, V: RowViewer<R>> Drop for Renderer<'_, R, V> {
