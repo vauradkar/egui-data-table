@@ -58,6 +58,9 @@ pub struct Renderer<'a, R, V: RowViewer<R>> {
     pub id_header: String,
     /// when set to false, no context menu is shows. Defauls to true
     pub show_context_menu: bool,
+
+    /// Performs these actions *before* performing any Hot-Key related UI actions
+    actions: Option<Vec<UiAction>>,
 }
 
 impl<R, V: RowViewer<R>> egui::Widget for Renderer<'_, R, V> {
@@ -81,6 +84,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
             style: Default::default(),
             id_header: "POS / ID".into(),
             show_context_menu: true,
+            actions: None,
         }
     }
 
@@ -111,6 +115,13 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
 
     pub fn with_max_undo_history(mut self, max_undo_history: usize) -> Self {
         self.style.max_undo_history = max_undo_history;
+        self
+    }
+
+    /// Allows adding actions programmatically. Keyboard hotkeys are processed
+    /// after actions queued by this function
+    pub fn with_actions(mut self, actions: Vec<UiAction>) -> Self {
+        self.actions = Some(actions);
         self
     }
 
@@ -321,7 +332,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
         let visible_cols = s.vis_cols().clone();
         let no_rounding = egui::Rounding::ZERO;
 
-        let mut actions = Vec::<UiAction>::new();
+        let mut actions = self.actions.take().unwrap_or_default();
         let mut edit_started = false;
         let hotkeys = viewer.hotkeys(&s.ui_action_context());
 
@@ -761,13 +772,14 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 // Context Menu Rendering
 fn render_context_menu<R>(
     commands: &mut Vec<Command<R>>,
     ctx: &egui::Context,
     s: &mut Box<UiState<R>>,
     actions: &mut Vec<UiAction>,
-    hotkeys: &Vec<(egui::KeyboardShortcut, UiAction)>,
+    hotkeys: &[(egui::KeyboardShortcut, UiAction)],
     vis_row: VisRowPos,
     head_resp: &Response,
     vis_col: VisColumnPos,
