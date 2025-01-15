@@ -67,9 +67,8 @@ impl<R> RowCodec<R> for () {
 /// The primary trait for the spreadsheet viewer.
 // TODO: When lifetime for `'static` is stabilized; remove the `static` bound.
 pub trait RowViewer<R>: 'static {
-    /// Number of columns. Changing this will invalidate the table rendering status
-    /// totally(including undo histories), therefore frequently changing this value is
-    /// discouraged.
+    /// Number of columns. Changing this will completely invalidate the table rendering status,
+    /// including undo histories. Therefore, frequently changing this value is discouraged.
     fn num_columns(&mut self) -> usize;
 
     /// Name of the column. This can be dynamically changed.
@@ -95,9 +94,17 @@ pub trait RowViewer<R>: 'static {
     }
 
     /// Returns the rendering configuration for the column.
-    fn column_render_config(&mut self, column: usize) -> TableColumnConfig {
+    fn column_render_config(
+        &mut self,
+        column: usize,
+        is_last_visible_column: bool,
+    ) -> TableColumnConfig {
         let _ = column;
-        TableColumnConfig::auto().resizable(true)
+        if is_last_visible_column {
+            TableColumnConfig::remainder().at_least(24.0)
+        } else {
+            TableColumnConfig::auto().resizable(true)
+        }
     }
 
     /// Returns if given column is 'sortable'
@@ -218,11 +225,6 @@ pub trait RowViewer<R>: 'static {
     /// Return hotkeys for the current context.
     fn hotkeys(&mut self, context: &UiActionContext) -> Vec<(egui::KeyboardShortcut, UiAction)> {
         self::default_hotkeys(context)
-    }
-
-    /// Get trivial configurations for renderer.
-    fn trivial_config(&mut self) -> TrivialConfig {
-        Default::default()
     }
 
     /// If you want to keep UI state on storage(i.e. persist over sessions), return true from this
@@ -386,25 +388,5 @@ pub fn default_hotkeys(context: &UiActionContext) -> Vec<(KeyboardShortcut, UiAc
             (none, Key::Home, UiAction::NavTop),
             (none, Key::End, UiAction::NavBottom),
         ])
-    }
-}
-
-/* ---------------------------------------- Configuration --------------------------------------- */
-
-#[derive(Clone, Debug)]
-pub struct TrivialConfig {
-    /// If specify this as [`None`], the heterogeneous row height will be used.
-    pub table_row_height: Option<f32>,
-
-    /// Maximum number of undo history. This is applied when actual action is performed.
-    pub max_undo_history: usize,
-}
-
-impl Default for TrivialConfig {
-    fn default() -> Self {
-        Self {
-            table_row_height: None,
-            max_undo_history: 100,
-        }
     }
 }

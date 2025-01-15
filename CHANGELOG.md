@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased]
 
+## [0.6.0]
+
+### Changed
+
+- **BREAKING** Refactor `Viewer::column_render_config` to take additional parameter.
+
+## [0.5.1]
+
+### Added
+
+- Implement `Clone`, `Deref`, `DerefMut` for `DataTable` widget.
+- Implement `Serialize`, `Deserialize` for `DataTable` widget.
+
+### Changed
+
+- Manual dirty flag clearing now deprecated.
+
+### Fixed
+
+
+## [0.5.0] 
+
+### Added
+
+- New style flag to control editor behavior
+  - `Style::single_click_edit_mode`: Make single click available to start edit mode.
+
+### Removed
+
+- `viewer::TrivialConfig` was removed.
+  - Configs are integrated inside the `Style` of renderer. 
+
 ## [0.4.1] - 2024-12-14
 
 ### Added

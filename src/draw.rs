@@ -7,7 +7,7 @@ use egui_extras::Column;
 use tap::prelude::{Pipe, Tap};
 
 use crate::{
-    viewer::{EmptyRowCreateContext, RowViewer, TrivialConfig},
+    viewer::{EmptyRowCreateContext, RowViewer},
     DataTable, UiAction,
 };
 
@@ -22,7 +22,7 @@ mod tsv;
 
 /// Style configuration for the table.
 // TODO: Implement more style configurations.
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Copy)]
 #[non_exhaustive]
 pub struct Style {
     /// Background color override for selection. Default uses `visuals.selection.bg_fill`.
@@ -33,6 +33,17 @@ pub struct Style {
 
     /// Foreground color for cells that are going to be selected when mouse is dropped.
     pub fg_drag_selection: Option<egui::Color32>,
+
+    /* ·························································································· */
+    /// Maximum number of undo history. This is applied when actual action is performed.
+    pub max_undo_history: usize,
+
+    /// If specify this as [`None`], the heterogeneous row height will be used.
+    pub table_row_height: Option<f32>,
+
+    /// When enabled, single click on a cell will start editing mode. Default is `false` where
+    /// double action(click 1: select, click 2: edit) is required.
+    pub single_click_edit_mode: bool,
 }
 
 /* ------------------------------------------ Rendering ----------------------------------------- */
@@ -41,8 +52,6 @@ pub struct Renderer<'a, R, V: RowViewer<R>> {
     table: &'a mut DataTable<R>,
     viewer: &'a mut V,
     state: Option<Box<UiState<R>>>,
-
-    config: TrivialConfig,
     style: Style,
 }
 
@@ -54,19 +63,15 @@ impl<R, V: RowViewer<R>> egui::Widget for Renderer<'_, R, V> {
 
 impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
     pub fn new(table: &'a mut DataTable<R>, viewer: &'a mut V) -> Self {
-        Self {
-            state: Some(table.ui.take().unwrap_or_default().tap_mut(|x| {
-                if table.rows.is_empty() {
-                    table
-                        .rows
-                        .push(viewer.new_empty_row_for(EmptyRowCreateContext::InsertNewLine));
-                    x.force_mark_dirty();
-                }
+        if table.rows.is_empty() {
+            table.push(viewer.new_empty_row_for(EmptyRowCreateContext::InsertNewLine));
+        }
 
-                x.validate_identity(viewer);
+        Self {
+            state: Some(table.ui.take().unwrap_or_default().tap_mut(|state| {
+                state.validate_identity(viewer);
             })),
             table,
-            config: viewer.trivial_config(),
             viewer,
             style: Default::default(),
         }
@@ -83,16 +88,22 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
     }
 
     pub fn with_table_row_height(mut self, height: f32) -> Self {
-        self.config.table_row_height = Some(height);
+        self.style.table_row_height = Some(height);
         self
     }
 
     pub fn with_max_undo_history(mut self, max_undo_history: usize) -> Self {
-        self.config.max_undo_history = max_undo_history;
+        self.style.max_undo_history = max_undo_history;
         self
     }
 
-    pub fn show(mut self, ui: &mut egui::Ui) -> Response {
+    pub fn show(self, ui: &mut egui::Ui) -> Response {
+        egui::ScrollArea::horizontal()
+            .show(ui, |ui| self.impl_show(ui))
+            .inner
+    }
+
+    fn impl_show(mut self, ui: &mut egui::Ui) -> Response {
         let ctx = &ui.ctx().clone();
         let ui_id = ui.id();
         let style = ui.style().clone();
@@ -116,8 +127,14 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
 
         let mut builder = egui_extras::TableBuilder::new(ui).column(Column::auto());
 
-        for &column in s.vis_cols().iter() {
-            builder = builder.column(viewer.column_render_config(column.0));
+        let iter_vis_cols_with_flag = s
+            .vis_cols()
+            .iter()
+            .enumerate()
+            .map(|(index, column)| (column, index + 1 == s.vis_cols().len()));
+
+        for (column, flag) in iter_vis_cols_with_flag {
+            builder = builder.column(viewer.column_render_config(column.0, flag));
         }
 
         if replace(&mut s.cci_want_move_scroll, false) {
@@ -132,13 +149,9 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
             .max_scroll_height(f32::MAX)
             .sense(Sense::click_and_drag().tap_mut(|s| s.focusable = true))
             .header(20., |mut h| {
-                h.set_selected(s.cci_has_focus);
-                h.col(|ui| {
-                    ui.centered_and_justified(|ui| {
-                        ui.monospace("POS / ID");
-                    });
+                h.col(|_ui| {
+                    // TODO: Add `Configure Sorting` button
                 });
-                h.set_selected(false);
 
                 let has_any_hidden_col = s.vis_cols().len() != s.num_columns();
 
@@ -261,15 +274,16 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                 table.ui_mut().separator();
             })
             .body(|body: egui_extras::TableBody<'_>| {
-                resp_ret =
-                    Some(self.show_body(body, painter, commands, ctx, &style, ui_id, resp_total));
+                resp_ret = Some(
+                    self.impl_show_body(body, painter, commands, ctx, &style, ui_id, resp_total),
+                );
             });
 
         resp_ret.unwrap_or_else(|| ui.label("??"))
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn show_body(
+    fn impl_show_body(
         &mut self,
         body: egui_extras::TableBody<'_>,
         mut _painter: egui::Painter,
@@ -324,7 +338,6 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
 
                             _ => return true,
                         }
-
                         false
                     })
                 });
@@ -359,6 +372,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
         let row_id_digits = table.len().max(1).ilog10();
 
         let body_max_rect = body.max_rect();
+        let has_any_sort = !s.sort().is_empty();
 
         let pointer_interact_pos = ctx.input(|i| i.pointer.latest_pos().unwrap_or_default());
         let pointer_primary_down = ctx.input(|i| i.pointer.button_down(PointerButton::Primary));
@@ -413,10 +427,21 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.separator();
 
-                    ui.monospace(
-                        RichText::from(f!("{:·>width$}", row_id.0, width = row_id_digits as usize))
+                    if has_any_sort {
+                        ui.monospace(
+                            RichText::from(f!(
+                                "{:·>width$}",
+                                row_id.0,
+                                width = row_id_digits as usize
+                            ))
                             .strong(),
-                    );
+                        );
+                    } else {
+                        ui.monospace(
+                            RichText::from(f!("{:>width$}", "", width = row_id_digits as usize))
+                                .strong(),
+                        );
+                    }
 
                     ui.monospace(
                         RichText::from(f!(
@@ -539,7 +564,9 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                     s.cci_sel_update(linear_index);
                 }
 
-                if resp.clicked_by(PointerButton::Primary) && is_interactive_cell {
+                if resp.clicked_by(PointerButton::Primary)
+                    && (self.style.single_click_edit_mode || is_interactive_cell)
+                {
                     response_consumed = true;
                     commands.push(Command::CcEditStart(
                         row_id,
@@ -703,13 +730,13 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
             }
 
             // Update row height cache if necessary.
-            if self.config.table_row_height.is_none() && prev_row_height != new_maximum_height {
+            if self.style.table_row_height.is_none() && prev_row_height != new_maximum_height {
                 row_height_updates.push((vis_row, new_maximum_height));
             }
         }; // ~ render_fn
 
         // Actual rendering
-        if let Some(height) = self.config.table_row_height {
+        if let Some(height) = self.style.table_row_height {
             body.rows(height, cc_row_heights.len(), render_fn);
         } else {
             body.heterogeneous_rows(cc_row_heights.iter().cloned(), render_fn);
@@ -769,7 +796,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                         });
                     }
 
-                    s.push_new_command(table, viewer, cmd, self.config.max_undo_history);
+                    s.push_new_command(table, viewer, cmd, self.style.max_undo_history);
                 }
             }
         }
