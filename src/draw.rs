@@ -1,7 +1,8 @@
 use std::mem::{replace, take};
 
 use egui::{
-    Align, Color32, Event, Layout, PointerButton, Rect, Response, RichText, Sense, Stroke, Widget,
+    Align, Color32, Event, Layout, PointerButton, Rect, Response, RichText, Sense, Stroke,
+    StrokeKind, Widget,
 };
 use egui_extras::Column;
 use tap::prelude::{Pipe, Tap};
@@ -36,6 +37,8 @@ pub struct Style {
 
     /* ·························································································· */
     /// Maximum number of undo history. This is applied when actual action is performed.
+    ///
+    /// Setting value '0' results in kinda appropriate default value.
     pub max_undo_history: usize,
 
     /// If specify this as [`None`], the heterogeneous row height will be used.
@@ -175,7 +178,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
             .drag_to_scroll(false) // Drag is used for selection;
             .striped(true)
             .max_scroll_height(f32::MAX)
-            .sense(Sense::click_and_drag().tap_mut(|s| s.focusable = true))
+            .sense(Sense::click_and_drag().tap_mut(|s| s.set(Sense::FOCUSABLE, true)))
             .header(20., |mut h| {
                 h.set_selected(s.cci_has_focus);
                 h.col(|ui| {
@@ -228,7 +231,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                         if let Some(p) = &painter {
                             p.rect_filled(
                                 col_rect,
-                                egui::Rounding::ZERO,
+                                egui::CornerRadius::ZERO,
                                 visual.selection.bg_fill.gamma_multiply(0.2),
                             );
                         }
@@ -253,7 +256,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                         if let Some(p) = &painter {
                             p.rect_filled(
                                 col_rect,
-                                egui::Rounding::ZERO,
+                                egui::CornerRadius::ZERO,
                                 visual.selection.bg_fill.gamma_multiply(0.5),
                             );
                         }
@@ -330,7 +333,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
         let table = &mut *self.table;
         let visual = &style.visuals;
         let visible_cols = s.vis_cols().clone();
-        let no_rounding = egui::Rounding::ZERO;
+        let no_rounding = egui::CornerRadius::ZERO;
 
         let mut actions = self.actions.take().unwrap_or_default();
         let mut edit_started = false;
@@ -527,6 +530,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                                     .fg_drag_selection
                                     .unwrap_or(visual.selection.bg_fill),
                             },
+                            StrokeKind::Inside,
                         );
                     }
 
@@ -670,7 +674,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                     .min_size(editing_cell_rect.size())
                     .max_width(editing_cell_rect.width())
                     .title_bar(false)
-                    .frame(egui::Frame::none().rounding(egui::Rounding::same(3.)))
+                    .frame(egui::Frame::NONE.corner_radius(egui::CornerRadius::same(3)))
                     .show(ctx, |ui| {
                         ui.with_layout(Layout::top_down_justified(Align::LEFT), |ui| {
                             if let Some(resp) =
@@ -748,9 +752,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
         for cmd in commands {
             match cmd {
                 Command::CcUpdateSystemClipboard(new_content) => {
-                    ctx.output_mut(|x| {
-                        x.copied_text = new_content;
-                    });
+                    ctx.copy_text(new_content);
                 }
                 cmd => {
                     if matches!(cmd, Command::CcCommitEdit) {
@@ -762,7 +764,16 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                         });
                     }
 
-                    s.push_new_command(table, viewer, cmd, self.style.max_undo_history);
+                    s.push_new_command(
+                        table,
+                        viewer,
+                        cmd,
+                        if self.style.max_undo_history == 0 {
+                            100
+                        } else {
+                            self.style.max_undo_history
+                        },
+                    );
                 }
             }
         }
