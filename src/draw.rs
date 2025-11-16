@@ -1,8 +1,8 @@
 use std::mem::{replace, take};
 
 use egui::{
-    Align, Color32, Event, Layout, PointerButton, Rect, Response, RichText, Sense, Stroke,
-    StrokeKind, Widget,
+    Align, Color32, Event, Layout, PointerButton, PopupAnchor, Rect, Response, RichText, Sense,
+    Stroke, StrokeKind, Tooltip, UiKind, Widget,
 };
 use egui_extras::Column;
 use tap::prelude::{Pipe, Tap};
@@ -219,12 +219,17 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                     resp.dnd_set_drag_payload(vis_col);
 
                     if resp.dragged() {
-                        egui::popup::show_tooltip_text(
-                            ctx,
+                        Tooltip::always_open(
+                            ctx.clone(),
                             ui_layer_id,
                             "_EGUI_DATATABLE__COLUMN_MOVE__".into(),
-                            viewer.column_name(col.0),
-                        );
+                            PopupAnchor::Pointer,
+                        )
+                        .gap(12.0)
+                        .show(|ui| {
+                            let colum_name = viewer.column_name(col.0);
+                            ui.label(colum_name);
+                        });
                     }
 
                     if resp.hovered() && viewer.is_sortable_column(col.0) {
@@ -275,12 +280,12 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                     resp.context_menu(|ui| {
                         if ui.button("Hide").clicked() {
                             commands.push(Command::CcHideColumn(col));
-                            ui.close_menu();
+                            ui.close_kind(UiKind::Menu);
                         }
 
                         if !s.sort().is_empty() && ui.button("Clear Sort").clicked() {
                             commands.push(Command::SetColumnSort(Vec::new()));
-                            ui.close_menu();
+                            ui.close_kind(UiKind::Menu);
                         }
 
                         if has_any_hidden_col {
@@ -295,7 +300,7 @@ impl<'a, R, V: RowViewer<R>> Renderer<'a, R, V> {
                                         what: col,
                                         at: vis_col,
                                     });
-                                    ui.close_menu();
+                                    ui.close_kind(UiKind::Menu);
                                 }
                             }
                         }
@@ -835,7 +840,7 @@ fn render_context_menu<R>(
         let mut n_sep_menu = 0;
         let mut draw_sep = false;
 
-        [
+        let _ = [
             Some((selected, "🖻", "Selection: Copy", UiAction::CopySelection)),
             Some((selected, "🖻", "Selection: Cut", UiAction::CutSelection)),
             Some((selected, "🗙", "Selection: Clear", UiAction::DeleteSelection)),
@@ -876,7 +881,7 @@ fn render_context_menu<R>(
 
                     if r.clicked() {
                         actions.push(action);
-                        ui.close_menu();
+                        ui.close_kind(UiKind::Menu);
                     }
                 });
 
